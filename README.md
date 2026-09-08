@@ -111,6 +111,33 @@ npm run seed
 
 ---
 
+## 🌐 Deploying to Render (Free Web Service)
+
+Deploy RailMate as a single full-stack web service on Render's free tier:
+
+1. **Create New Web Service**:
+   - Connect your GitHub repo: `https://github.com/akashhhhh246/railmate`
+   - **Environment**: `Node`
+   - **Region**: Any (e.g., Singapore / Frankfurt / Oregon)
+   - **Branch**: `main`
+
+2. **Build & Start Commands**:
+   - **Build Command**:
+     ```bash
+     npm --prefix backend install && npm --prefix frontend install && npm --prefix frontend run build
+     ```
+     *(or simply `npm run build`)*
+   - **Start Command**:
+     ```bash
+     node backend/index.js
+     ```
+     *(or `npm start`)*
+
+3. **Environment Variables**:
+   - `NODE_VERSION`: `22` (Required for built-in `node:sqlite`)
+
+---
+
 ## 📜 License
 
 MIT License. Crafted with passion for rail passengers and commuters.
