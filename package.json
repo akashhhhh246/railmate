@@ -1,0 +1,13 @@
+{
+  "name": "railmate-workspace",
+  "version": "1.0.0",
+  "description": "RailMate - Personal Train Journey Companion",
+  "private": true,
+  "scripts": {
+    "dev": "node start-dev.js",
+    "backend": "npm --prefix backend start",
+    "frontend": "npm --prefix frontend run dev",
+    "seed": "npm --prefix backend run seed",
+    "build": "npm --prefix frontend run build"
+  }
+}
