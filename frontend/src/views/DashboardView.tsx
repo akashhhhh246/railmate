@@ -1,9 +1,11 @@
 import React from 'react';
 import {
   PlusCircle, Train, Compass, CheckCircle2, Clock,
-  MapPin, ArrowRight, BarChart3, ShieldAlert
+  MapPin, ArrowRight, BarChart3, ShieldAlert, Calendar
 } from 'lucide-react';
 import type { Journey, JourneyStats } from '../types';
+import { JourneyHeroCard } from '../components/JourneyHeroCard';
+import { formatDateReadable } from '../utils/dateUtils';
 
 interface DashboardViewProps {
   stats: JourneyStats | null;
@@ -20,6 +22,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   stats,
   onAddJourney,
   onViewJourneys,
+  nextJourney,
+  recentJourneys,
+  onOpenJourney,
   onViewAllJourneys
 }) => {
   const handleViewAll = onViewJourneys || onViewAllJourneys;
@@ -72,6 +77,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <span>Add New Entry</span>
         </button>
       </div>
+
+      {/* Next Upcoming / In-Progress Journey Hero Card */}
+      {nextJourney && onOpenJourney && (
+        <div style={{ marginBottom: '32px' }}>
+          <JourneyHeroCard journey={nextJourney} onOpenDetails={onOpenJourney} />
+        </div>
+      )}
 
       {/* Primary 4-Card Statistics Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '18px', marginBottom: '32px' }}>
@@ -356,6 +368,94 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </button>
         )}
       </div>
+
+      {/* Recent Logged Journeys Quick View */}
+      {recentJourneys && recentJourneys.length > 0 && onOpenJourney && (
+        <div style={{ marginTop: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-white)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Train size={20} color="var(--color-sandal)" />
+              Recent Logged Journeys ({recentJourneys.length})
+            </h3>
+            {handleViewAll && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleViewAll}
+                style={{ fontSize: '0.82rem' }}
+              >
+                Open Full List →
+              </button>
+            )}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
+            {recentJourneys.slice(0, 4).map(j => {
+              const isSuburban = j.journey_type === 'suburban';
+              return (
+                <div
+                  key={j.id}
+                  onClick={() => onOpenJourney(j.id)}
+                  style={{
+                    background: 'var(--color-brown-card)',
+                    border: '1px solid var(--color-brown-border)',
+                    borderRadius: 'var(--radius-lg)',
+                    padding: '20px',
+                    cursor: 'pointer',
+                    transition: 'transform 0.2s, border-color 0.2s',
+                    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--color-sandal)';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--color-brown-border)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: isSuburban ? 'var(--color-green-light)' : 'var(--color-blue-light)', fontWeight: 800 }}>
+                      {isSuburban ? 'EMU Suburban' : `#${j.train_number}`}
+                    </span>
+                    <span style={{
+                      fontSize: '0.72rem',
+                      fontWeight: 800,
+                      padding: '2px 8px',
+                      borderRadius: 'var(--radius-pill)',
+                      background: j.status === 'upcoming' ? 'rgba(37, 99, 235, 0.15)' : j.status === 'in_progress' ? 'rgba(234, 179, 8, 0.15)' : 'rgba(22, 163, 74, 0.15)',
+                      color: j.status === 'upcoming' ? 'var(--color-blue-light)' : j.status === 'in_progress' ? '#fde047' : 'var(--color-green-light)',
+                      border: '1px solid currentColor'
+                    }}>
+                      {j.status ? j.status.toUpperCase() : 'LOGGED'}
+                    </span>
+                  </div>
+
+                  <h4 style={{ fontSize: '1.08rem', fontWeight: 800, color: 'var(--color-white)', margin: '0 0 8px 0' }}>
+                    {j.train_name}
+                  </h4>
+
+                  <div style={{ fontSize: '0.86rem', color: 'var(--color-sandal)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+                    <span>{j.origin}</span>
+                    <ArrowRight size={13} />
+                    <span>{j.destination}</span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--color-sandal-muted)', borderTop: '1px solid var(--color-brown-border-light)', paddingTop: '10px' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <Calendar size={13} />
+                      {formatDateReadable(j.journey_date)}
+                    </span>
+                    <span style={{ color: 'var(--color-sandal)', fontWeight: 700 }}>
+                      View Details →
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
     </div>
   );

@@ -101,3 +101,18 @@ export async function resetAllData(): Promise<{ success: boolean; message: strin
   if (!json.success) throw new Error(json.error || 'Failed to reset database');
   return json;
 }
+
+export async function syncJourneys(journeys: Journey[]): Promise<{ success: boolean; count: number }> {
+  try {
+    const res = await fetch(`${API_BASE}/journeys/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ journeys })
+    });
+    const json = await res.json();
+    return json;
+  } catch (err) {
+    console.warn('Sync journeys to server failed:', err);
+    return { success: false, count: 0 };
+  }
+}

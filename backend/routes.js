@@ -333,6 +333,93 @@ router.post('/journeys', (req, res) => {
   }
 });
 
+// POST /api/journeys/sync (Bulk sync / restore client journeys if backend database was reset/ephemeral)
+router.post('/journeys/sync', (req, res) => {
+  try {
+    const { journeys = [] } = req.body;
+    if (!Array.isArray(journeys) || journeys.length === 0) {
+      return res.json({ success: true, message: 'No journeys to sync', count: 0 });
+    }
+
+    const existingJourneys = db.prepare('SELECT train_name, train_number, journey_date, origin, destination FROM journeys').all();
+    const existingKey = (j) => `${j.train_name}_${j.train_number}_${j.journey_date}_${j.origin}_${j.destination}`;
+    const existingSet = new Set(existingJourneys.map(existingKey));
+
+    const insertJourney = db.prepare(`
+      INSERT INTO journeys (
+        train_name, train_number, origin, destination, journey_date,
+        departure_time, arrival_time, arrival_date_offset,
+        coach, seat, travel_class, pnr, platform, notes,
+        journey_type, suburban_city, suburban_line,
+        is_waiting_list, waiting_list_number
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const insertStop = db.prepare(`
+      INSERT INTO station_stops (journey_id, station_name, arrival_time, departure_time, stop_order)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+
+    let restoredCount = 0;
+    db.exec('BEGIN TRANSACTION;');
+
+    for (const j of journeys) {
+      const key = existingKey(j);
+      if (!existingSet.has(key)) {
+        const isSuburban = j.journey_type === 'suburban';
+        const isWL = Boolean(j.is_waiting_list);
+
+        const result = insertJourney.run(
+          (j.train_name || '').trim(),
+          (j.train_number || '').trim(),
+          (j.origin || '').trim(),
+          (j.destination || '').trim(),
+          (j.journey_date || '').trim(),
+          (j.departure_time || '').trim(),
+          (j.arrival_time || '').trim(),
+          parseInt(j.arrival_date_offset, 10) || 0,
+          (j.coach || '').trim(),
+          (j.seat || '').trim(),
+          (j.travel_class || '').trim(),
+          (j.pnr || '').trim(),
+          (j.platform || '').trim(),
+          (j.notes || '').trim(),
+          isSuburban ? 'suburban' : 'intercity',
+          (j.suburban_city || '').trim(),
+          (j.suburban_line || '').trim(),
+          isWL ? 1 : 0,
+          isWL ? (j.waiting_list_number || '').trim() : ''
+        );
+
+        const journeyId = Number(result.lastInsertRowid);
+        existingSet.add(key);
+        restoredCount++;
+
+        if (Array.isArray(j.stops) && j.stops.length > 0) {
+          j.stops.forEach((stop, index) => {
+            if (stop.station_name && stop.station_name.trim()) {
+              insertStop.run(
+                journeyId,
+                stop.station_name.trim(),
+                (stop.arrival_time || '').trim(),
+                (stop.departure_time || '').trim(),
+                index + 1
+              );
+            }
+          });
+        }
+      }
+    }
+
+    db.exec('COMMIT;');
+    res.json({ success: true, message: `Synced ${restoredCount} journeys`, count: restoredCount });
+  } catch (error) {
+    console.error('Error syncing journeys:', error);
+    try { db.exec('ROLLBACK;'); } catch (_) {}
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // PUT /api/journeys/:id
 router.put('/journeys/:id', (req, res) => {
   try {

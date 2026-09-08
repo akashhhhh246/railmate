@@ -3,7 +3,7 @@ import { Clock, Volume2 } from 'lucide-react';
 import type { Journey, JourneyFormData, JourneyStats, ViewMode } from './types';
 import {
   fetchJourneys, fetchNextJourney, fetchJourneyById,
-  createJourney, updateJourney, deleteJourney, fetchStats
+  createJourney, updateJourney, deleteJourney, fetchStats, syncJourneys
 } from './api';
 import { Navigation } from './components/Navigation';
 import { DashboardView } from './views/DashboardView';
@@ -16,8 +16,25 @@ import { ConfirmModal } from './components/ConfirmModal';
 import { playRailwayChime } from './utils/audio';
 
 export function App() {
-  const [currentView, setCurrentView] = useState<ViewMode>('dashboard');
-  const [journeys, setJourneys] = useState<Journey[]>([]);
+  const [currentView, setCurrentView] = useState<ViewMode>(() => {
+    try {
+      const saved = localStorage.getItem('railmate_active_view');
+      if (saved && ['dashboard', 'journeys', 'past-journeys', 'analytics'].includes(saved)) {
+        return saved as ViewMode;
+      }
+    } catch {}
+    return 'dashboard';
+  });
+
+  const [journeys, setJourneys] = useState<Journey[]>(() => {
+    try {
+      const saved = localStorage.getItem('railmate_journeys_backup');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
   const [nextJourney, setNextJourney] = useState<Journey | null>(null);
   const [selectedJourney, setSelectedJourney] = useState<Journey | null>(null);
   const [stats, setStats] = useState<JourneyStats | null>(null);
@@ -55,9 +72,39 @@ export function App() {
         fetchStats()
       ]);
 
+      let localJourneys: Journey[] = [];
+      try {
+        const savedRaw = localStorage.getItem('railmate_journeys_backup');
+        if (savedRaw) localJourneys = JSON.parse(savedRaw);
+      } catch {}
+
+      // If backend was reset (e.g. Render free tier container restart) but browser has saved journeys:
+      if (allJourneys.length === 0 && localJourneys.length > 0) {
+        console.log('Detected reset backend database on free tier. Restoring from client backup...');
+        await syncJourneys(localJourneys);
+        const [restoredJourneys, restoredNext, restoredStats] = await Promise.all([
+          fetchJourneys(),
+          fetchNextJourney(),
+          fetchStats()
+        ]);
+        setJourneys(restoredJourneys);
+        setNextJourney(restoredNext);
+        setStats(restoredStats);
+        try {
+          localStorage.setItem('railmate_journeys_backup', JSON.stringify(restoredJourneys));
+        } catch {}
+        return;
+      }
+
       setJourneys(allJourneys);
       setNextJourney(next);
       setStats(statsData);
+
+      try {
+        if (allJourneys.length > 0) {
+          localStorage.setItem('railmate_journeys_backup', JSON.stringify(allJourneys));
+        }
+      } catch {}
 
       if (selectedJourney) {
         try {
@@ -68,8 +115,18 @@ export function App() {
         }
       }
     } catch (err: any) {
-      console.error('Failed to load RailMate data:', err);
-      setError(err.message || 'Unable to connect to RailMate backend server on port 2264.');
+      console.error('Failed to load RailMate data from server:', err);
+      // Fallback to local storage backup if server is cold-starting or offline
+      try {
+        const savedRaw = localStorage.getItem('railmate_journeys_backup');
+        if (savedRaw) {
+          const localJourneys = JSON.parse(savedRaw);
+          if (localJourneys.length > 0) {
+            setJourneys(localJourneys);
+          }
+        }
+      } catch {}
+      setError(err.message || 'Connecting to server...');
     }
   }, [selectedJourney?.id]);
 
@@ -80,6 +137,11 @@ export function App() {
   // View Navigation
   const handleNavigate = (view: ViewMode) => {
     setCurrentView(view);
+    try {
+      if (['dashboard', 'journeys', 'past-journeys', 'analytics'].includes(view)) {
+        localStorage.setItem('railmate_active_view', view);
+      }
+    } catch {}
     window.scrollTo({ top: 0, behavior: 'smooth' });
     // Refresh stats whenever landing on dashboard
     if (view === 'dashboard') {
@@ -141,6 +203,10 @@ export function App() {
     try {
       await deleteJourney(deleteModal.id);
       setDeleteModal({ isOpen: false, id: 0, name: '' });
+      try {
+        const remaining = journeys.filter(j => j.id !== deleteModal.id);
+        localStorage.setItem('railmate_journeys_backup', JSON.stringify(remaining));
+      } catch {}
       await loadData();
       if (currentView === 'journey-details') {
         setCurrentView('journeys');
